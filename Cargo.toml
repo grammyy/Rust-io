@@ -1,0 +1,11 @@
+[package]
+name = "Rust-io"
+version = "0.1.0"
+authors = ["grammy"]
+edition = "2021"
+
+[dependencies]
+tui = "0.19"
+crossterm = "0.27"
+sysinfo = "0.29"
+signal-hook = "0.3.17"
