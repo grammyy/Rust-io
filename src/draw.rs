@@ -13,70 +13,93 @@ pub fn draw<B: Backend>(
     disk_processes: &[String],
     network_info: &[String],
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let cpu_height = ((cpu_usage.len() as f64 / 5.0).ceil() + 2.0) as u16;
-
     terminal.draw(|frame| {
-        let chunks = Layout::default()
+        let cpu_height = ((cpu_usage.len() as f64 / 5.0).ceil() + 2.0) as u16;
+        let size = frame.size();
+
+        let (main_direction, process_constraint, disk_constraint, network_constraint) = if size.width < size.height {
+            // ↓ vertical layout, swap network and processes sections ↓
+            (
+                Direction::Vertical,
+                Constraint::Percentage(40),
+                Constraint::Length(10), // set disk to fit-content-like behavior
+                Constraint::Length(5),  // set network to a small height
+            )
+        } else {
+            // ↓ horizontal layout, processes on the right, network stays on the bottom ↓
+            (
+                Direction::Horizontal,
+                Constraint::Percentage(40),
+                Constraint::Min(10),  // keep disk with a minimum size
+                Constraint::Length(5), // network size remains fixed
+            )
+        };
+
+        let main_chunks = Layout::default()
+            .direction(main_direction)
+            .constraints([
+                Constraint::Min(70), // main section
+                process_constraint,  // processes section
+            ])
+            .split(size);
+
+        let left_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(cpu_height), //cpu
-                Constraint::Length(3), // mem
-                Constraint::Min(10),   // disk
-                Constraint::Length(3), // networks
-            ].as_ref())
-            .split(frame.size());
+                Constraint::Length(cpu_height), // cpu cores
+                Constraint::Length(3), // memory
+                disk_constraint, // dynamically adjusted disk section
+                network_constraint, // network section gets adjusted
+            ])
+            .split(main_chunks[0]);
 
-        let disk_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints(
-                [
-                    Constraint::Percentage(40), // disk usage
-                    Constraint::Percentage(60), // disk processes
-                ].as_ref(),
-            )
-            .split(chunks[2]);
-
-        // ↓ chunks cpu cores into 5 item sections ↓
+        // ↓ cpu cores ↓
         let cpu_cores = cpu_usage
             .chunks(5)
-            .map(|chunk| chunk.join(" ")) 
+            .map(|chunk| chunk.join(" "))
             .collect::<Vec<String>>()
             .join("\n");
-    
-        // ↓ cpu usage ↓
+
         frame.render_widget(
-            Paragraph::new(
-                cpu_cores
-            ).block(Block::default().title("CPU Usage").borders(Borders::ALL)
-        ), chunks[0]);
+            Paragraph::new(cpu_cores).block(Block::default().title("CPU Usage").borders(Borders::ALL)),
+            left_chunks[0],
+        );
 
         // ↓ memory usage ↓
         frame.render_widget(
-            Paragraph::new(
-                memory_info
-            ).block(Block::default().title("Memory Usage").borders(Borders::ALL)
-        ), chunks[1]);
+            Paragraph::new(memory_info).block(Block::default().title("Memory Usage").borders(Borders::ALL)),
+            left_chunks[1],
+        );
 
         // ↓ disk usage ↓
         frame.render_widget(
-            Paragraph::new(
-                disk_info.join("\n")
-            ).block(Block::default().title("Disk Usage").borders(Borders::ALL)
-        ), disk_chunks[0]);
+            Paragraph::new(disk_info.join("\n")).block(Block::default().title("Disk Usage").borders(Borders::ALL)),
+            left_chunks[2],
+        );
 
-        // ↓ disk processes ↓
-        frame.render_widget(
-            Paragraph::new(
-                disk_processes.join("\n")
-            ).block(Block::default().title("Disk Processes").borders(Borders::ALL)
-        ), disk_chunks[1]);
-
-        // ↓ network info ↓
-        frame.render_widget(
-            Paragraph::new(
-                network_info.join("\n")
-            ).block(Block::default().title("Network Activity").borders(Borders::ALL)
-        ), chunks[3]);
+        // ↓ network activity or disk processes, depending on orientation ↓
+        if size.width < size.height {
+            // If width < height, swap network and processes
+            frame.render_widget(
+                Paragraph::new(disk_processes.join("\n")).block(Block::default().title("Disk Processes").borders(Borders::ALL)),
+                left_chunks[3],
+            );
+            frame.render_widget(
+                Paragraph::new(network_info.join("\n")).block(Block::default().title("Network Activity").borders(Borders::ALL)),
+                main_chunks[1],
+            );
+        } else {
+            // Otherwise, keep original order
+            frame.render_widget(
+                Paragraph::new(network_info.join("\n")).block(Block::default().title("Network Activity").borders(Borders::ALL)),
+                left_chunks[3],
+            );
+            frame.render_widget(
+                Paragraph::new(disk_processes.join("\n")).block(Block::default().title("Disk Processes").borders(Borders::ALL)),
+                main_chunks[1],
+            );
+        }
     })?;
+
     Ok(())
 }
